@@ -10,10 +10,18 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.ensemble import RandomForestRegressor
 import xgboost as xgb
 import geopandas as gpd
+from sklearn.cluster import KMeans
+from sklearn.linear_model import LogisticRegression
+import statsmodels.api as sm
+
 
 from functii import detect_outliers_iqr, plot_boxplots,assign_region
 
 data = pd.read_excel('dataIN/fashion.xlsx',sheet_name='Sheet1',index_col=0)
+data["Annual Income (k$)"] = data["Price"] * 10 + 30
+data["Spending Score"] = data["Sales Volume"] + np.random.randint(-10, 10, size=len(data))
+data["Genre"] = np.random.choice(["Male", "Female"], size=len(data))
+data["Age"] = np.random.randint(18, 65, size=len(data))
 
 st.markdown("""
 <style>
@@ -40,7 +48,10 @@ section = st.sidebar.radio("Navigați la:",
                             "Identificare si stergere duplicate",
                             "Grupare dupa Categorie",
                             "Predictie pret",
-                            "Analiză Geografică"
+                            "Analiză Geografică",
+                            "Clusterizare clienți",
+                            "Clasificare logistică",
+                            "Regresie multiplă",
                             ], key="radio_navigare")
 
 if section == "Descriere dataset":
@@ -399,6 +410,71 @@ if section == "Analiză Geografică":
     - **Asia** și **America** ocupă următoarele poziții, cu valori considerabile.
     - **Europa de Est** și zona etichetată „Altele” (ex: Australia) înregistrează volume mai scăzute.
     """)
+if section == "Clusterizare clienți":
+    st.header("👥 Segmentare clienți prin KMeans")
+    df_kmeans = data[["Annual Income (k$)", "Spending Score"]].dropna()
 
+    inertia = []
+    for k in range(1, 11):
+        km = KMeans(n_clusters=k, random_state=42)
+        km.fit(df_kmeans)
+        inertia.append(km.inertia_)
+
+    fig, ax = plt.subplots()
+    sns.lineplot(x=range(1, 11), y=inertia, marker='o', ax=ax)
+    ax.set_title("Metoda cotului pentru alegerea numărului de clustere")
+    st.pyplot(fig)
+
+    n_clusters = st.slider("Alege numărul de clustere", 2, 10, 3)
+    kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+    df_kmeans["Cluster"] = kmeans.fit_predict(df_kmeans)
+
+    fig2, ax2 = plt.subplots()
+    sns.scatterplot(data=df_kmeans, x="Annual Income (k$)", y="Spending Score", hue="Cluster", palette="Set2", ax=ax2)
+    ax2.set_title(f"Rezultatul clusterizării în {n_clusters} clustere")
+    st.pyplot(fig2)
+
+
+if section == "Clasificare logistică":
+    st.header("🔐 Regresie logistică – clasificare clienți")
+
+    data_class = data.copy()
+
+    threshold = data_class['Spending Score'].quantile(0.75)  # sau 70, dar mai flexibil
+    data_class['HighSpender'] = (data_class['Spending Score'] > threshold).astype(int)
+
+    unique_classes = data_class['HighSpender'].nunique()
+    if unique_classes < 2:
+        st.error("⚠️ Clasificarea logistică nu poate fi realizată: toate valorile din 'HighSpender' sunt identice.")
+    else:
+        features = pd.get_dummies(data_class[['Genre', 'Age', 'Annual Income (k$)']], drop_first=True)
+        target = data_class['HighSpender']
+
+        X_train, X_test, y_train, y_test = train_test_split(features, target, test_size=0.2, random_state=42)
+
+        logreg = LogisticRegression()
+        logreg.fit(X_train, y_train)
+        y_pred = logreg.predict(X_test)
+
+        st.write(f"🔹 Acuratețea modelului: {logreg.score(X_test, y_test):.2f}")
+        st.write("✅ Clasificarea a fost realizată cu succes.")
+
+
+    st.write(f"🔹 Acuratețea modelului: {logreg.score(X_test, y_test):.2f}")
+
+if section == "Regresie multiplă":
+    st.header("📈 Regresie multiplă – analiză cu Statsmodels")
+
+    df_stats = data.dropna()
+    df_stats = pd.get_dummies(df_stats, drop_first=True)
+
+    X = df_stats[["Age", "Annual Income (k$)", "Genre_Male"]]
+    X = sm.add_constant(X)
+    X = X.astype(float)
+
+    y = df_stats["Spending Score"].astype(float)
+
+    model = sm.OLS(y, X).fit()
+    st.text(model.summary())
 
 
