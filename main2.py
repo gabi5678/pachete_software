@@ -84,22 +84,48 @@ if section == "Valori lipsa ale datasetului":
 
 if section == "Tratare valori lipsa":
     st.header("🧼 Tratarea valorilor lipsă")
+
     missing = data.isnull().sum()
     missing_percent = (missing / len(data)) * 100
     missing_df = pd.DataFrame({"Valori Lipsă": missing, "Procent": missing_percent})
     missing_df = missing_df[missing_df["Valori Lipsă"] > 0]
-    st.dataframe(missing_df)
 
-    data_imputed = data.copy()
-    for col in data.columns:
-        if data[col].isnull().sum() > 0:
-            if data[col].dtype == 'object':
-                data_imputed[col] = data[col].fillna(data[col].mode()[0])
-            else:
-                data_imputed[col] = data[col].fillna(data[col].median())
+    if missing_df.empty:
+        st.success("✅ Nu există valori lipsă de tratat!")
+    else:
+        st.dataframe(missing_df)
 
-    st.success("✅ Valorile lipsa au fost completate (mediana sau moda, dupa tipul coloanei)")
-    st.dataframe(data_imputed.head())
+        metoda_selectata = st.radio(
+            "Alege metoda de tratare:",
+            ("Completare cu mediana/moda", "Eliminare rânduri cu valori lipsă", "Completare cu media"),
+            key="radio_metoda_valori_lipsa"
+        )
+
+        if metoda_selectata == "Completare cu mediana/moda":
+            data_imputed = data.copy()
+            for col in data.columns:
+                if data[col].isnull().sum() > 0:
+                    if data[col].dtype == 'object':
+                        data_imputed[col] = data[col].fillna(data[col].mode()[0])
+                    else:
+                        data_imputed[col] = data[col].fillna(data[col].median())
+            st.success("✅ Valorile lipsă au fost completate (mediana sau moda, după tipul coloanei)")
+            st.dataframe(data_imputed.head())
+
+        elif metoda_selectata == "Eliminare rânduri cu valori lipsă":
+            data_dropped = data.dropna()
+            st.warning(f"⚠️ S-au eliminat {len(data) - len(data_dropped)} rânduri care conțineau valori lipsă.")
+            st.dataframe(data_dropped.head())
+
+        elif metoda_selectata == "Completare cu media":
+            data_mean_imputed = data.copy()
+            for col in data.columns:
+                if data[col].isnull().sum() > 0:
+                    if data[col].dtype != 'object':
+                        data_mean_imputed[col] = data[col].fillna(data[col].mean())
+            st.success("✅ Valorile lipsă au fost completate cu media (doar coloane numerice).")
+            st.dataframe(data_mean_imputed.head())
+
 
 if section == "Analiza valorilor extreme":
     st.title("📊 Analiza Valorilor Extreme - Fashion Sales")
@@ -364,13 +390,14 @@ if section == "Predictie pret":
 
     st.markdown("""
     ### 🧠 Interpretare rezultate:
-    - 🔹 **Linear Regression** a obținut un scor R² de `0.931`, ceea ce înseamnă că explică aproximativ 93% din variația datelor. Acesta este un rezultat foarte bun pentru un model simplu.
-    - 🌲 **Random Forest** a obținut un scor R² de `0.994`, ceea ce indică o potrivire foarte bună cu datele, având erori mai mici.
-    - ⚡ **XGBoost** a obținut cel mai bun scor, cu un R² de `0.998`, ceea ce sugerează o potrivire aproape perfectă pe datele de antrenament.
+    - 🔹 **Linear Regression** a obținut un scor R² de `0.931`, ceea ce înseamnă că aproximativ 93% din variația prețurilor este explicată de model. MAE-ul de `0.13` sugerează o eroare medie destul de mică, ceea ce e foarte bun pentru un model liniar de bază.
 
-    🔍 **Recomandare**: Modelele precum **Random Forest** și **XGBoost** cu scoruri foarte mari de R² pot indica **overfitting**. Este recomandat să folosești tehnici de validare încrucișată (cross-validation) și să testezi pe un set extern de date pentru a evalua generalizarea corectă a modelelor.
-    """)
+    - 🌲 **Random Forest** a obținut un scor R² excepțional de `0.999`, cu o eroare MAE de doar `0.01`. Acest lucru indică o potrivire aproape perfectă pe datele de testare, ceea ce ar putea fi un semn de **overfitting** (modelul a învățat prea bine datele).
 
+    - ⚡ **XGBoost** are un scor R² de `0.998`, foarte apropiat de cel al Random Forest, cu aceeași eroare medie (`0.01`). Este un rezultat excelent, confirmând performanța ridicată a acestui model avansat.
+
+    🔍 **Recomandare**:
+    Atât **Random Forest** cât și **XGBoost** oferă performanțe foarte mari, dar aceste scoruri aproape perfecte pot fi înșelătoare. """)
 
 if section == "Analiză Geografică":
     st.title("🌍 Vizualizare Geografică a Vânzărilor")
@@ -434,13 +461,34 @@ if section == "Clusterizare clienți":
     ax2.set_title(f"Rezultatul clusterizării în {n_clusters} clustere")
     st.pyplot(fig2)
 
+    st.markdown("""
+    ### 🧠 Interpretare clusterizare KMeans
+
+    📌 **Metoda cotului (Elbow Method):**
+    - Graficul evidențiază punctul de inflexiune în jurul valorii `k=3`, ceea ce sugerează că 3 este un număr optim de clustere.
+    - Alegerea a mai mult de 3 clustere duce la o îmbunătățire nesemnificativă a performanței și poate complica analiza.
+
+    📊 **Rezultatul clusterizării în 3 clustere:**
+    - Fiecare client a fost grupat în funcție de **Venitul Anual** și **Scorul de Cheltuieli**.
+    - Clusterele rezultate sunt:
+      - 🟢 **Cluster 0** – clienți cu scor mare de cheltuieli: potențiali cumpărători fideli sau segment VIP.
+      - 🟠 **Cluster 1** – clienți cu scor mediu: cumpărători constanți, dar moderați.
+      - 🔵 **Cluster 2** – clienți cu scor redus: cumpărători ocazionali, posibil sensibili la preț.
+
+    📈 **Observații:**
+    - Distribuția pe axe arată că scorul de cheltuieli este principalul diferențiator între clustere.
+    - Venitul anual are o influență mai mică în separarea grupurilor, semnalând că atitudinea față de cheltuieli nu depinde direct de venit.
+
+
+    """)
+
 
 if section == "Clasificare logistică":
     st.header("🔐 Regresie logistică – clasificare clienți")
 
     data_class = data.copy()
 
-    threshold = data_class['Spending Score'].quantile(0.75)  # sau 70, dar mai flexibil
+    threshold = data_class['Spending Score'].quantile(0.75)
     data_class['HighSpender'] = (data_class['Spending Score'] > threshold).astype(int)
 
     unique_classes = data_class['HighSpender'].nunique()
@@ -456,11 +504,20 @@ if section == "Clasificare logistică":
         logreg.fit(X_train, y_train)
         y_pred = logreg.predict(X_test)
 
-        st.write(f"🔹 Acuratețea modelului: {logreg.score(X_test, y_test):.2f}")
         st.write("✅ Clasificarea a fost realizată cu succes.")
 
 
     st.write(f"🔹 Acuratețea modelului: {logreg.score(X_test, y_test):.2f}")
+    st.markdown("""
+    ### 🧠 Interpretare rezultate – Regresie Logistică
+
+    🔍 Modelul de regresie logistică a fost antrenat pentru a **clasifica clienții în funcție de comportamentul lor de cumpărare**, mai exact dacă sunt sau nu „mari cheltuitori”.
+
+    📊 **Acuratețea obținută: 0.75**
+    - Acuratețea de `75%` înseamnă că modelul a clasificat corect 3 din 4 clienți din setul de test.
+    - Este un rezultat **acceptabil**, indicând că modelul are o capacitate decentă de generalizare.
+
+    """)
 
 if section == "Regresie multiplă":
     st.header("📈 Regresie multiplă – analiză cu Statsmodels")
@@ -478,3 +535,11 @@ if section == "Regresie multiplă":
     st.text(model.summary())
 
 
+    st.markdown("""
+    ### 📉 Interpretare regresie multiplă
+    
+    - 🔹 **R² = 0.000** → Modelul nu explică deloc variația scorului de cheltuieli.
+    - 🔹 Niciuna dintre variabile (`Age`, `Annual Income`, `Genre_Male`) **nu este semnificativă** (p-valori > 0.05).
+    - ⚠️ Modelul **nu este util** pentru predicție în forma actuală.
+    - ✅ Se recomandă explorarea altor variabile sau metode de modelare.
+    """)
